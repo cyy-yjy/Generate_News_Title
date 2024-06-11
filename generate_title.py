@@ -204,7 +204,8 @@ def get_title():
         data = request.get_json()
         text = data.get('text')
         print("接收到post请求", text)
-        ans = predict_one_sample(model, tokenizer, device, args, text)
+        titles = predict_one_sample(model, tokenizer, device, args, text)
+        ans=titles[0]
         response['response']['isError'] = False
         response['response']['data'] = ans
     except Exception as e:
