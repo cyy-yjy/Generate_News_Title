@@ -5,8 +5,8 @@ from model import GPT2LMHeadModel
 from transformers import BertTokenizer
 import torch.nn.functional as F
 import copy
-
-
+from flask import Flask, request, jsonify
+app = Flask(__name__)
 def set_args():
     """设置模型预测所需参数"""
     parser = argparse.ArgumentParser()
@@ -150,7 +150,7 @@ def predict_one_sample(model, tokenizer, device, args, content):
                 "".join(tokenizer.convert_ids_to_tokens(responses)).replace("##", "").replace("[space]", " "))
     return candidate_responses
 
-
+args,model,tokenizer,device = None,None,None,None
 def main():
     """主函数"""
     # 设置预测的配置参数
@@ -164,6 +164,7 @@ def main():
     model = GPT2LMHeadModel.from_pretrained(args.model_path)
     model.to(device)
     model.eval()
+    print('初始化完成')
     print('开始对新闻生成标题，输入CTRL + Z，则退出')
     try:
         while True:
@@ -174,6 +175,46 @@ def main():
     except:
         pass
 
+def init():
+    global args, model, tokenizer, device  # 声明全局变量
+    # 设置预测的配置参数
+    args = set_args()
+    # 获取设备信息
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICE"] = args.device
+    device = torch.device("cuda" if torch.cuda.is_available() and int(args.device) >= 0 else "cpu")
+    # 实例化tokenizer和model
+    tokenizer = BertTokenizer.from_pretrained(args.vocab_path, do_lower_case=True)
+    model = GPT2LMHeadModel.from_pretrained(args.model_path)
+    model.to(device)
+    model.eval()
+    print('初始化完成')
+@app.route("/get-title", methods=['POST'])
+def get_title():
+    print(1)
+    response = {
+        "response": {
+            "isError": True,
+            "msg": "", }
+    }
+    try:
+        # 如果args或model或tokenizer或device为None，则初始化
+        if args or model or tokenizer or device == None:
+            init()
+        data = request.get_json()
+        text = data.get('text')
+        print("接收到post请求", text)
+        ans = predict_one_sample(model, tokenizer, device, args, text)
+        response['response']['isError'] = False
+        response['response']['data'] = ans
+    except Exception as e:
+        response['response']['msg'] = str(e)
+    return jsonify(response)
 
 if __name__ == '__main__':
-    main()
+    print("已经进入main函数")
+    app.run(
+        host='0.0.0.0',
+        port=7000,
+        debug=True
+    )
