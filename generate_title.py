@@ -85,7 +85,7 @@ def predict_one_sample(model, tokenizer, device, args, content):
     title_id = tokenizer.convert_tokens_to_ids("[Title]")
     unk_id = tokenizer.convert_tokens_to_ids("[UNK]")
     sep_id = tokenizer.convert_tokens_to_ids("[SEP]")
-    # 将tokens索引化，变成模型所需格式
+    # 将tokens索引化，变成模型所需格式 把[CLS]添加到输入序列的开头，并将分隔标记[SEP]添加到输入序列的末尾
     content_tokens = ["[CLS]"] + content_tokens + ["[SEP]"]
     input_ids = tokenizer.convert_tokens_to_ids(content_tokens)
     # 将input_ids和token_type_ids进行扩充，扩充到需要预测标题的个数，即batch_size
@@ -107,8 +107,8 @@ def predict_one_sample(model, tokenizer, device, args, content):
             next_token_logits = outputs[0][:, -1, :]
             # 对batch_size进行遍历，将词表中出现在序列中的词的概率进行惩罚
             for index in range(args.batch_size):
-                for token_id in set([token_ids[index] for token_ids in generated]):
-                    next_token_logits[index][token_id] /= args.repetition_penalty
+                for token_id in set([token_ids[index] for token_ids in generated]):#使用set去除了重复的词汇
+                    next_token_logits[index][token_id] /= args.repetition_penalty#对于重复词汇，将其对应的预测概率除以args.repetition_penalty
             # 对batch_size进行遍历，将词表中的UNK的值设为无穷小
             for next_token_logit in next_token_logits:
                 next_token_logit[unk_id] = -float("Inf")
@@ -129,16 +129,16 @@ def predict_one_sample(model, tokenizer, device, args, content):
                     break
             if finish_flag:
                 break
-            # 将预测标记添加到generated中
+            # 将当前预测的结果添加到generated（当前已生成的内容）中
             generated.append([token.item() for token in next_tokens[:, 0]])
-            # 将预测结果拼接到input_tensors和token_type_tensors上，继续下一次预测
+            # 将预测结果拼接到input_tensors和token_type_tensors（用于区分不同的句子或段落）上，继续下一次预测
             input_tensors = torch.cat((input_tensors, next_tokens), dim=-1)
             token_type_tensors = torch.cat((token_type_tensors, next_token_type), dim=-1)
         # 用于存储预测结果
         candidate_responses = []
         # 对batch_size进行遍历，并将token_id变成对应汉字
         for index in range(args.batch_size):
-            responses = []
+            responses = []#对于每个batch_size，将生成的词汇存入responses
             for token_index in range(len(generated)):
                 # 判断，当出现sep_id时，停止在该序列中添加token
                 if generated[token_index][index] != sep_id:

@@ -19,6 +19,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         """
         super().__init__(config)
         self.transformer = GPT2Model(config)
+        # 线性层，映射到词汇表，相当于分类，预测下一个token
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.init_weights()
 
@@ -47,12 +48,12 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             # 计算loss时，title_id不可以为None，因为需要title_id找到title的部分
             if title_id is None or token_type_ids is None:
                 raise Exception("当labels不为None时， title_id和token_type_ids均不可以为None。")
-            # 获取mask值，如果token_type_ids中等于title_id的部分需要计算loss，标记为1；否则为0。
+            # 获取mask值，用于标记哪些位置的标签需要计算损失。如果token_type_ids中等于title_id的部分需要计算loss，标记为1；否则为0。
             # size:[batch_size, sequence_length]
             mask = (token_type_ids == title_id).long()
             # 获取新的标签，size:[batch_size, sequence_length]
             labels = labels * mask
-            # 对预测结果和标签进行偏移操作
+            # 对预测结果和标签进行偏移操作，使它们对齐
             # GPT2的生成机制为通过前面的token，预测下一个token；并且labels与input_ids相同，
             # 因此input_ids中的第一个token的预测结果，实际上是标签中的第二个token，以此类推，最终仅计算sequence_length-1个token的loss
             shift_logits = lm_logits[..., :-1, :].contiguous()
@@ -60,7 +61,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
             # 定义损失函数CrossEntropyLoss，并且设置忽略计算loss的索引，以及返回loss的形式
             # 忽略shift_labels中为0的loss，也就是仅计算title部分的损失值
-            # 对loss的计算方式设为sum，由于我们仅计算了itle部分的损失值，如果使用mean，会使loss变小（实际除的是sequence_length-1，不是title部分的真实长度）
+            # 对loss的计算方式设为sum，由于我们仅计算了title部分的损失值，如果使用mean，会使loss变小（实际除的是sequence_length-1，不是title部分的真实长度）
             loss_fct = CrossEntropyLoss(ignore_index=0, reduction="sum")
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             # 获取title部分的真实长度，并计算真实loss
