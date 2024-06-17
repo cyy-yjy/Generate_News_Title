@@ -214,6 +214,7 @@ def get_title():
 
 if __name__ == '__main__':
     print("已经进入main函数")
+    # main()
     app.run(
         host='0.0.0.0',
         port=7000,
